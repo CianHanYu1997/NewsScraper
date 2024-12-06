@@ -7,8 +7,6 @@ from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
-# TODO: 改為異步操作
-
 
 class RedisClient:
     """Redis客戶端，管理所有數據庫操作"""
