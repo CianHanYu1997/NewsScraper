@@ -57,7 +57,7 @@ class RedisClient:
             for url in urls:
                 # 檢查URL是否已存在
                 if not await self.redis.hexists(
-                    self.KEYS['all'], url):  # type: ignore
+                        self.KEYS['all'], url):  # type: ignore
                     # 新URL，添加到 all（帶時間戳）和 pending
                     pipe.hset(self.KEYS['all'], url, current_time)
                     pipe.sadd(self.KEYS['pending'], url)
