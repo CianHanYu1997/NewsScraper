@@ -105,3 +105,4 @@ venv.bak/
 
 # add
 .idea/
+config/redis/data
