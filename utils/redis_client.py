@@ -1,5 +1,6 @@
 import logging
 import json
+import time
 from redis import Redis
 from typing import Set, Optional, Dict, Any
 from datetime import datetime
@@ -12,7 +13,7 @@ logger = logging.getLogger(__name__)
 class RedisClient:
     """Redis客戶端，管理所有數據庫操作"""
     KEYS = {
-        'all': 'urls:all',              # set 類型: 儲存所有已知的URLs，用於去重
+        'all': 'urls:all',              # hash 類型: URL 及其添加時間
         'pending': 'urls:pending',      # set 類型: 待處理的URLs佇列
         'failed': 'urls:failed',        # hash 類型: 失敗的URLs及其錯誤信息
         'completed': 'urls:completed',  # set 類型: 已完成處理的URLs
@@ -49,13 +50,15 @@ class RedisClient:
             'duplicate': 0       # 重複的URL數量
         }
 
+        current_time = str(time.time())
+
         # 使用pipeline 減少與Redis通信次數，並保證操作的原子性
         with self.redis.pipeline() as pipe:
             for url in urls:
                 # 檢查URL是否已存在
-                if not self.redis.sismember(self.KEYS['all'], url):
-                    # 新URL, 添加到all 和 pending集合
-                    pipe.sadd(self.KEYS['all'], url)
+                if not self.redis.hexists(self.KEYS['all'], url):
+                    # 新URL，添加到 all（帶時間戳）和 pending
+                    pipe.hset(self.KEYS['all'], url, current_time)
                     pipe.sadd(self.KEYS['pending'], url)
                     stats['new'] += 1
                 else:
@@ -127,8 +130,32 @@ class RedisClient:
         """獲取爬蟲統計信息"""
         return self.redis.hgetall(self.KEYS['stats'])  # type: ignore
 
-    def clear_all(self) -> None:
-        """清除所有數據"""
-        for key in self.KEYS.values():
-            self.redis.delete(key)
-            self._initialize_redis()
+    def cleanup_old_urls(self, days: int = 7):
+        """清理指定天數前添加的URLs"""
+        cutoff_time = int(time.time()) - (days * 86400)
+
+        # 獲取所有URL及其時間戳
+        all_urls: Dict[str, str] = self.redis.hgetall(
+            self.KEYS['all'])  # type: ignore
+
+        # 找出需要刪除的URLs
+        urls_to_delete = [
+            url for url, timestamp in all_urls.items()
+            if int(timestamp) < cutoff_time
+        ]
+
+        if urls_to_delete:
+            with self.redis.pipeline() as pipe:
+                # 從 all 中刪除舊的URLs
+                pipe.hdel(self.KEYS['all'], *urls_to_delete)
+
+                # 同時從其他集合中也清理掉這些URL
+                for url in urls_to_delete:
+                    pipe.srem(self.KEYS['pending'], url)
+                    pipe.srem(self.KEYS['completed'], url)
+                    pipe.hdel(self.KEYS['failed'], url)
+                    pipe.hdel(self.KEYS['html'], url)
+
+                pipe.execute()
+
+            logger.info(f"已清理 {len(urls_to_delete)} 個舊的URLs")
