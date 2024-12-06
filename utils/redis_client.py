@@ -1,7 +1,7 @@
 import logging
 import json
 import time
-from redis import Redis
+import redis.asyncio as redis
 from typing import Set, Optional, Dict, Any
 from datetime import datetime
 
@@ -23,16 +23,16 @@ class RedisClient:
 
     def __init__(self, host: str = '127.0.0.1', port: int = 6379):
         # 創建Redis連接
-        self.redis: Redis = Redis(
+        self.redis = redis.Redis(
             host=host,
             port=port,
             decode_responses=True,  # 將bytes解碼為str
         )
 
-    def _initialize_redis(self):
+    async def _initialize_redis(self):
         """初始化Redis數據庫"""
         # 檢查並初始化統計計數器
-        if not self.redis.exists(self.KEYS['stats']):
+        if not await self.redis.exists(self.KEYS['stats']):
             initial_stats = {
                 'total_urls': 0,
                 'success_count': 0,
@@ -40,9 +40,9 @@ class RedisClient:
                 'last_update': datetime.now().isoformat()
             }
             # 將整個initial_stats保存到 Redis中
-            self.redis.hset(self.KEYS['stats'], mapping=initial_stats)
+            await self.redis.hset(self.KEYS['stats'], mapping=initial_stats)
 
-    def add_urls(self, urls: Set[str]) -> Dict[str, int]:
+    async def add_urls(self, urls: Set[str]) -> Dict[str, int]:
         """批量添加新URLs到Redis數據庫中的集合(urls:pending, urls:all)"""
         stats = {
             'total': len(urls),  # 輸入的URL總數
@@ -53,10 +53,11 @@ class RedisClient:
         current_time = str(time.time())
 
         # 使用pipeline 減少與Redis通信次數，並保證操作的原子性
-        with self.redis.pipeline() as pipe:
+        async with self.redis.pipeline() as pipe:
             for url in urls:
                 # 檢查URL是否已存在
-                if not self.redis.hexists(self.KEYS['all'], url):
+                if not await self.redis.hexists(
+                    self.KEYS['all'], url):  # type: ignore
                     # 新URL，添加到 all（帶時間戳）和 pending
                     pipe.hset(self.KEYS['all'], url, current_time)
                     pipe.sadd(self.KEYS['pending'], url)
@@ -70,21 +71,21 @@ class RedisClient:
                 pipe.hset(self.KEYS['stats'], 'last_update',
                           datetime.now().isoformat())
 
-            pipe.execute()  # 執行所有命令
+            await pipe.execute()  # 執行所有命令
 
         return stats
 
-    def get_pending_url(self) -> Optional[str]:
+    async def get_pending_url(self) -> Optional[str]:
         """獲取一個待處理的URL"""
         # spop 返回值為 str, list, None
-        result = self.redis.spop(self.KEYS['pending'])
+        result = await self.redis.spop(self.KEYS['pending'])  # type: ignore
         return str(result) if result is not None else None
 
-    def mark_url_completedd(self, url: str, html_content: Optional[str]
-                            ) -> bool:
+    async def mark_url_completedd(self, url: str, html_content: Optional[str]
+                                  ) -> bool:
         """標記URL為已完成"""
         try:
-            with self.redis.pipeline() as pipe:
+            async with self.redis.pipeline() as pipe:
                 # 從pending中刪除
                 pipe.srem(self.KEYS['pending'], url)
 
@@ -101,13 +102,13 @@ class RedisClient:
                           datetime.now().isoformat())
 
                 # 執行所有操作
-                pipe.execute()
+                await pipe.execute()
             return True
         except Exception as e:
             logger.error(f"標記URL為已完成時出現錯誤: {str(e)}")
             return False
 
-    def mark_url_failed(self, url: str, error_msg: str) -> bool:
+    async def mark_url_failed(self, url: str, error_msg: str) -> bool:
         """標記URL為失敗"""
         try:
             # Reids只能存字符串, 不能直接存python字典, 因此轉成json格式
@@ -117,25 +118,25 @@ class RedisClient:
                 'retries': 0
             })
 
-            with self.redis.pipeline() as pipe:
+            async with self.redis.pipeline() as pipe:
                 pipe.hset(self.KEYS['failed'], url, failed_info)
                 pipe.hincrby(self.KEYS['stats'], 'failure_count', 1)
-                pipe.execute()
+                await pipe.execute()
             return True
         except Exception as e:
             logger.error(f"標記URL為失敗時出現錯誤: {str(e)}")
             return False
 
-    def get_stats(self) -> Dict[Any, Any]:
+    async def get_stats(self) -> Dict[Any, Any]:
         """獲取爬蟲統計信息"""
-        return self.redis.hgetall(self.KEYS['stats'])  # type: ignore
+        return await self.redis.hgetall(self.KEYS['stats'])   # type: ignore
 
-    def cleanup_old_urls(self, days: int = 7):
+    async def cleanup_old_urls(self, days: int = 7):
         """清理指定天數前添加的URLs"""
         cutoff_time = int(time.time()) - (days * 86400)
 
         # 獲取所有URL及其時間戳
-        all_urls: Dict[str, str] = self.redis.hgetall(
+        all_urls: Dict = await self.redis.hgetall(
             self.KEYS['all'])  # type: ignore
 
         # 找出需要刪除的URLs
@@ -145,7 +146,7 @@ class RedisClient:
         ]
 
         if urls_to_delete:
-            with self.redis.pipeline() as pipe:
+            async with self.redis.pipeline() as pipe:
                 # 從 all 中刪除舊的URLs
                 pipe.hdel(self.KEYS['all'], *urls_to_delete)
 
@@ -156,6 +157,6 @@ class RedisClient:
                     pipe.hdel(self.KEYS['failed'], url)
                     pipe.hdel(self.KEYS['html'], url)
 
-                pipe.execute()
+                await pipe.execute()
 
             logger.info(f"已清理 {len(urls_to_delete)} 個舊的URLs")
