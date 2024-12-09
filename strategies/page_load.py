@@ -4,8 +4,9 @@ import asyncio
 from abc import ABC, abstractmethod
 from typing import Optional
 from selenium import webdriver
-from selenium.webdriver.support.ui import WebDriverWait, Select
+from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.remote.webelement import WebElement
 from selenium.common.exceptions import (
     TimeoutException,
     ElementClickInterceptedException,
@@ -134,60 +135,79 @@ class ScrollPaginationLoadStrategy(PageLoadStrategy):
     async def load_more_content(
             self,
             driver: webdriver.Chrome,
-            wait: WebDriverWait) -> bool:
+            wait: WebDriverWait,
+            max_retries: int = 3) -> bool:
         try:
             scroll_attempts = 0
             while True:
                 # 1. 獲取當前頁面高度
-                last_height = driver.execute_script(
-                    "return document.body.scrollHeight")
+                last_height = await asyncio.to_thread(
+                    lambda: driver.execute_script(
+                        "return document.body.scrollHeight")
+                )
 
                 # 2. 滾動到頁面底部
-                driver.execute_script(
-                    "window.scrollTo(0, document.body.scrollHeight);")
-                self.random_sleep()  # 給滾動一個短暫的緩衝時間
+                await asyncio.to_thread(
+                    lambda: driver.execute_script(
+                        "window.scrollTo(0, document.body.scrollHeight);"
+                    )
+                )
+                await self._async_random_sleep()  # 給滾動一個短暫的緩衝時間
 
                 try:
                     # 3. 尋找 Show More
-                    show_more_button = wait.until(
-                        EC.element_to_be_clickable(self.next_button_locator))
+                    show_more_button = await asyncio.to_thread(
+                        lambda: wait.until(
+                            EC.element_to_be_clickable(
+                                self.next_button_locator)
+                        )
+                    )
 
-                    # 4. 處理最大筆數選項（如果有設定）
-                    if self.max_result_locator and scroll_attempts == 0:
-                        try:
-                            max_result_select = wait.until(
-                                EC.element_to_be_clickable(
-                                    self.max_result_locator))
-                            select = Select(max_result_select)
-                            select.select_by_value(str(self.max_result))
-                            max_result_select.click()
-                            self.random_sleep()  # 給一點時間讓選項生效
-                        except TimeoutException:
-                            logger.info("未找到最大筆數選擇器，將繼續使用Show More按鈕加載")
+                    # # 4. 處理最大筆數選項（如果有設定）
+                    # if self.max_result_locator and scroll_attempts == 0:
+                    #     try:
+                    #         max_result_select = wait.until(
+                    #             EC.element_to_be_clickable(
+                    #                 self.max_result_locator))
+                    #         select = Select(max_result_select)
+                    #         select.select_by_value(str(self.max_result))
+                    #         max_result_select.click()
+                    #         self.random_sleep()  # 給一點時間讓選項生效
+                    #     except TimeoutException:
+                    #         logger.info("未找到最大筆數選擇器，將繼續使用Show More按鈕加載")
 
                     # 5. 滾動到按鈕位置並點擊
-                    driver.execute_script(
-                        "arguments[0].scrollIntoView(true);", show_more_button)
-                    time.sleep(2)  # 給頁面一些時間來響應滾動
+                    await asyncio.to_thread(
+                        lambda: driver.execute_script(
+                            "arguments[0].scrollIntoView(true);",
+                            show_more_button
+                        )
+                    )
+                    await asyncio.sleep(2)  # 給頁面一些時間來響應滾動
 
-                    # 嘗試點擊按鈕，如果按鈕變為不可點擊或消失則結束
-                    try:
-                        show_more_button.click()
-                    except (ElementClickInterceptedException,
-                            StaleElementReferenceException):
-                        driver.execute_script(
-                            "arguments[0].click();", show_more_button)
+                    # 使用重試機制處理按鈕點擊
+                    success = await self._retry_click_button(
+                        driver,
+                        show_more_button,
+                        max_retries
+                    )
+                    if not success:
+                        logger.warning("無法點擊Show More按鈕")
+                        return False
 
-                    self.random_sleep()
+                    await self._async_random_sleep()
 
                     # 6. 檢查頁面是否有新內容加載
-                    new_height = driver.execute_script(
-                        "return document.body.scrollHeight")
+                    new_height = await asyncio.to_thread(
+                        lambda: driver.execute_script(
+                            "return document.body.scrollHeight"
+                        )
+                    )
                     if new_height == last_height:
                         logger.info("頁面高度未變化，已到達底部")
                         return False
-                    scroll_attempts += 1
 
+                    scroll_attempts += 1
                     logger.info(f"目前已進入第 {scroll_attempts+1} 頁")
 
                 except TimeoutException:
@@ -197,3 +217,45 @@ class ScrollPaginationLoadStrategy(PageLoadStrategy):
         except Exception:
             logger.info("未找到Show More按鈕")
             return False
+
+    async def _async_random_sleep(
+            self,
+            min_time: float = 1,
+            max_time: float = 3):
+        """異步隨機休眠"""
+        sleep_time = random.uniform(min_time, max_time)
+        await asyncio.sleep(sleep_time)
+
+    async def _retry_click_button(
+        self,
+        driver,
+        button: WebElement,
+        max_retries: int
+    ) -> bool:
+        """重試按鈕點擊的輔助方法"""
+        for attempt in range(max_retries):
+            try:
+                # 方法1: 使用 Selenium 的普通點擊方法
+                await asyncio.to_thread(lambda: button.click())
+                return True
+            # 捕獲兩種特定的點擊異常：
+            # - ElementClickInterceptedException: 元素被其他元素遮擋
+            # - StaleElementReferenceException: 元素已經過期（頁面更新了）
+            except (ElementClickInterceptedException,
+                    StaleElementReferenceException):
+                try:
+                    # 方法2: 使用 JavaScript 來點擊
+                    await asyncio.to_thread(
+                        lambda: driver.execute_script(
+                            "arguments[0].click();",
+                            button
+                        )
+                    )
+                    return True
+                # 如果連 JavaScript 點擊也失敗
+                except Exception:
+                    if attempt == max_retries - 1:
+                        return False
+                    await asyncio.sleep(1)  # 重試前等待
+                    continue
+        return False

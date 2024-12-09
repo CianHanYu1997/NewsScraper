@@ -189,7 +189,7 @@ class NewsScraper(ABC):
                     # 滾動點擊show more頁面
                     elif isinstance(self.page_load_strategy, ScrollPaginationLoadStrategy):  # noqa:E501
                         logger.info("滾動點擊show more加載策略...")
-                        if not self.page_load_strategy.load_more_content(
+                        if not await self.page_load_strategy.load_more_content(
                                 self.driver, self.wait):
                             logger.info("滾動到底部，沒有更多內容可加載...")
 
