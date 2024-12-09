@@ -12,11 +12,11 @@ logger = logging.getLogger(__name__)
 class SETNScraper(NewsScraper):
     def __init__(self):
         # 1. 創建滾動加載策略
-        pagination_strategy = ScrollLoadStrategy()
+        page_load_strategy = ScrollLoadStrategy()
 
         # 2. 初始化父類
         super().__init__(
-            page_load_strategy=pagination_strategy
+            page_load_strategy=page_load_strategy
         )
 
     def get_name(self) -> str:
