@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Optional, List
-import time
 import logging
+import asyncio
 
 from selenium import webdriver
 from selenium.webdriver.support import expected_conditions as EC
@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 class NewsScraper(ABC):
-    """智庫爬蟲基類"""
+    """新聞網站爬蟲基類"""
 
     def __init__(
         self,
@@ -37,25 +37,31 @@ class NewsScraper(ABC):
         self.wait = None
         self.page_load_strategy = page_load_strategy
         self.url_builder = url_builder
+        # 為每個實例創建一個鎖
+        self._driver_lock = asyncio.Lock()
 
-    def start_driver(self):
-        """初始化 WebDriver"""
-        try:
-            if self.driver is None:
-                # 添加請求頭
-                self.options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')  # noqa
-                # 使用驅動實例開啟會話
-                self.driver = webdriver.Chrome(options=self.options)
-                self.wait = WebDriverWait(
-                    self.driver, timeout=10, poll_frequency=2)  # 設置輪詢時間為2秒
-        except Exception as e:
-            raise Exception(f"Driver 初始化失敗: {str(e)}")
+    async def start_driver(self):
+        """異步初始化 WebDriver"""
+        async with self._driver_lock:
+            try:
+                if self.driver is None:
+                    # 添加請求頭
+                    self.options.add_argument('--user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36')  # noqa
+                    # 使用驅動實例開啟會話
+                    self.driver = await asyncio.to_thread(
+                        lambda: webdriver.Chrome(options=self.options)
+                    )
+                    self.wait = WebDriverWait(
+                        self.driver, timeout=10, poll_frequency=2)  # 設置輪詢時間為2秒
+            except Exception as e:
+                raise Exception(f"Driver 初始化失敗: {str(e)}")
 
-    def close_driver(self):
-        if self.driver:
-            self.driver.quit()
-            self.driver = None
-            self.wait = None
+    async def close_driver(self):
+        async with self._driver_lock:
+            if self.driver:
+                await asyncio.to_thread(lambda: self.driver.quit())
+                self.driver = None
+                self.wait = None
 
     def _configure_options(self):
         """配置 Chrome 選項的鉤子方法，子類可以重寫此方法來添加特定配置"""
@@ -63,17 +69,17 @@ class NewsScraper(ABC):
 
     @abstractmethod
     def get_default_load_count(self) -> int:
-        """返回此智庫建議的預設加載次數"""
+        """返回此新聞網站建議的預設加載次數"""
         pass
 
     @abstractmethod
     def get_name(self) -> str:
-        """返回智庫名稱"""
+        """返回新聞網站"""
         pass
 
     @abstractmethod
     def get_base_url(self) -> str:
-        """返回智庫網站的基礎URL"""
+        """返回新聞網站的基礎URL"""
         pass
 
     @abstractmethod
@@ -88,7 +94,6 @@ class NewsScraper(ABC):
 
     def get_url(
             self,
-            url_type: Optional[str] = None,
             page: Optional[int] = None
     ) -> str:
         """獲取目標URL"""
@@ -96,12 +101,12 @@ class NewsScraper(ABC):
             return self.url_builder.build_url(page=page)
         return self.get_base_url()  # 如果沒有URL構建器，返回基礎URL
 
-    def fetch_urls(
+    async def fetch_urls(
             self,
             load_count: Optional[int] = None
     ) -> List[str]:
         """
-        獲取報導url
+        異步獲取報導url
         Args:
             load_count: 加載次數（可選），如果不指定則使用 get_default_load_count 的值
         """
@@ -111,16 +116,17 @@ class NewsScraper(ABC):
         current_load = 0  # 當前加載次數計數器
 
         try:
-            self.start_driver()
+            # 啟動 driver 時使用鎖保護，避免self.driver使用時被其他線程修改
+            await self.start_driver()
 
-            # 1. 確保 driver 已經初始化
+            # 確保 driver 已經初始化
             if self.driver is None:
                 raise Exception("WebDriver 未正確初始化")
 
             # 2. 找到爬取網址
             initial_url = self.get_url(page=current_load)
             logger.info(f'當前網址:{initial_url}')
-            self.driver.get(initial_url)
+            await asyncio.to_thread(lambda: self.driver.get(initial_url))
 
             while (max_loads == -1 or current_load+1 <= max_loads):
                 logger.info(
@@ -128,9 +134,11 @@ class NewsScraper(ABC):
 
                 # 3. 等待指定元素出現
                 try:
-                    url_elements = self.wait.until(
-                        EC.presence_of_all_elements_located(
-                            self.get_url_elements_locator()
+                    url_elements = await asyncio.to_thread(
+                        lambda: self.wait.until(
+                            EC.presence_of_all_elements_located(
+                                self.get_url_elements_locator()
+                            )
                         )
                     )
                     logger.info(f'總共找到:{len(url_elements)}筆相關元素')
@@ -161,14 +169,12 @@ class NewsScraper(ABC):
                     logger.info("沒有找到新報導, 停止爬取該網頁...")
                     break
 
-                logger.info(f'目前找到的內容:{all_urls}')
-
                 # 判斷頁面加載策略類型
                 if self.page_load_strategy:
                     # 滾動頁面
-                    if isinstance(self.page_load_strategy, ScrollLoadStrategy):
+                    if isinstance(self.page_load_strategy, ScrollLoadStrategy):  # noqa
                         logger.info("滾動加載策略...")
-                        if not self.page_load_strategy.load_more_content(
+                        if not await self.page_load_strategy.load_more_content(  # noqa
                                 self.driver, self.wait):
                             logger.info("滾動到底部，沒有更多內容可加載...")
 
@@ -176,9 +182,9 @@ class NewsScraper(ABC):
                     elif isinstance(self.page_load_strategy, PaginationLoadStrategy):  # noqa:E501
                         current_load += 1
                         new_url = self.get_url(page=current_load+1)
-                        self.driver.get(new_url)
-                        logger.info(f'準備爬取:{new_url}')
-                        time.sleep(3)  # 給頁面一點時間讀取
+                        await asyncio.to_thread(
+                            lambda: self.driver.get(new_url))
+                        await asyncio.sleep(3)
 
                     # 滾動點擊show more頁面
                     elif isinstance(self.page_load_strategy, ScrollPaginationLoadStrategy):  # noqa:E501
@@ -198,6 +204,5 @@ class NewsScraper(ABC):
             logger.error(f"錯誤| 爬取 {self.get_name()} 中發生錯誤: {str(e)}")
 
         finally:
-            self.close_driver()
-
+            await self.close_driver()
         return all_urls

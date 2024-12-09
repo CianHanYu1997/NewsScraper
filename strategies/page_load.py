@@ -1,5 +1,6 @@
 import logging
 import random
+import asyncio
 from abc import ABC, abstractmethod
 from typing import Optional
 from selenium import webdriver
@@ -18,7 +19,7 @@ class PageLoadStrategy(ABC):
     """頁面加載策略的抽象基類"""
 
     @abstractmethod
-    def load_more_content(
+    async def load_more_content(
             self, driver: webdriver.Chrome, wait: WebDriverWait) -> bool:
         """加載更多內容
         Returns:
@@ -36,11 +37,13 @@ class ScrollLoadStrategy(PageLoadStrategy):
         # 設置每次滾動後等待的時間，讓新內容有時間加載
         self.scroll_pause_time = scroll_pause_time
 
-    def load_more_content(
+    async def load_more_content(
             self, driver: webdriver.Chrome, wait: WebDriverWait) -> bool:
         # 獲取當前頁面高度
-        last_height = driver.execute_script(
-            "return document.body.scrollHeight")
+        last_height = await asyncio.to_thread(
+            lambda: driver.execute_script("return document.body.scrollHeight")
+        )
+
         same_high_count = 0
 
         # 設置最大嘗試次數，防止異常情況
@@ -49,15 +52,20 @@ class ScrollLoadStrategy(PageLoadStrategy):
 
         while attempts < max_attempts:
             # 1. 滾動到頁面底部
-            driver.execute_script(
-                "window.scrollTo(0, document.body.scrollHeight);")
+            await asyncio.to_thread(
+                lambda: driver.execute_script(
+                    "window.scrollTo(0, document.body.scrollHeight);"
+                )
+            )
 
             # 2. 等待新內容加載
-            time.sleep(self.scroll_pause_time)
+            await asyncio.sleep(self.scroll_pause_time)
 
             # 3. 計算新的頁面高度
-            new_height = driver.execute_script(
-                "return document.body.scrollHeight")
+            new_height = await asyncio.to_thread(
+                lambda: driver.execute_script(
+                    "return document.body.scrollHeight")
+            )
 
             # 4. 如果高度沒變，表示沒有新內容了
             if new_height == last_height:
@@ -81,8 +89,8 @@ class PaginationLoadStrategy(PageLoadStrategy):
     def __init__(self, next_button_locator: tuple):
         self.next_button_locator = next_button_locator
 
-    def load_more_content(self, driver: webdriver.Chrome,
-                          wait: WebDriverWait) -> bool:
+    async def load_more_content(self, driver: webdriver.Chrome,
+                                wait: WebDriverWait) -> bool:
         try:
             time.sleep(5)  # 等待2秒
 
@@ -123,7 +131,7 @@ class ScrollPaginationLoadStrategy(PageLoadStrategy):
         delay = base_delay + random_offset
         time.sleep(max(0.5, delay))  # 確保至少休眠0.5秒
 
-    def load_more_content(
+    async def load_more_content(
             self,
             driver: webdriver.Chrome,
             wait: WebDriverWait) -> bool:

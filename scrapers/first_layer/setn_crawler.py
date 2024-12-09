@@ -1,5 +1,4 @@
 import logging
-
 from typing import Optional
 from selenium.webdriver.common.by import By
 

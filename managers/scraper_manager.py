@@ -65,7 +65,7 @@ class ScraperManager:
 
         return all_articles
 
-    def scrape_selected(
+    async def scrape_selected(
             self,
             names: List[str],
             load_count: Optional[int] = None
@@ -84,7 +84,7 @@ class ScraperManager:
             logger.info(f"開始爬取 {name}")
             try:
                 scraper = self.scrapers[name]
-                urls = scraper.fetch_urls(load_count)
+                urls = await scraper.fetch_urls(load_count)
 
             except Exception as e:
                 logger.error(f"爬取 {name} 時發生錯誤: {str(e)}")

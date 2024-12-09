@@ -20,6 +20,7 @@
 │   └── news_url.py        # 新聞URL構建器
 ├── utils/                 # 工具函數
 │   └── logging_config.py  # 日誌配置
+│   └── redis_client.py  # Redis服務
 └── manager/               # 爬蟲管理
     └── scraper_manager.py # 爬蟲管理器
 ```
