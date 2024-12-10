@@ -4,6 +4,7 @@ import time
 import redis.asyncio as redis
 from typing import Set, Optional, Dict, Any
 from datetime import datetime
+from config.redis import constants as RedisConfig
 
 logger = logging.getLogger(__name__)
 
@@ -19,11 +20,15 @@ class RedisClient:
         'stats': 'stats:crawler',       # hash 類型: 爬蟲統計信息
     }
 
-    def __init__(self, host: str = '127.0.0.1', port: int = 6379):
+    def __init__(
+            self,
+            host: str = RedisConfig.HOST,
+            port: int = RedisConfig.PORT):
         # 創建Redis連接
         self.redis = redis.Redis(
             host=host,
             port=port,
+            db=RedisConfig.DB_CRAWLER,
             decode_responses=True,  # 將bytes解碼為str
         )
 
