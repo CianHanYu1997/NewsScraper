@@ -32,6 +32,19 @@ class RedisClient:
             decode_responses=True,  # 將bytes解碼為str
         )
 
+    async def close(self):
+        await self.redis.close()
+        await self.redis.connection_pool.disconnect()
+
+    async def __aenter__(self):
+        """異步上下文管理器的進入方法"""
+        await self._initialize_redis()
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        """異步上下文管理器的退出方法"""
+        await self.close()
+
     async def _initialize_redis(self):
         """初始化Redis數據庫"""
         # 檢查並初始化統計計數器
