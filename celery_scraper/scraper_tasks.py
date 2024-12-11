@@ -12,10 +12,6 @@ def run_async(coro):
 
 @app.task
 def scrape_all():
-    # 使用 asyncio 創建新的事件循環
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-
     async def _do_scrape():
         # 在這個函數內部創建和管理所有異步資源
         # 建立Redis客戶端
@@ -37,6 +33,11 @@ def scrape_all():
         finally:
             # 確保 Redis 連接被關閉
             await redis_client.close()
+        # 使用 asyncio 創建新的事件循環
+
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
     try:
         return loop.run_until_complete(_do_scrape())
 
@@ -53,5 +54,5 @@ def scrape_all():
 
 @app.task
 def daily_report():
-    print("生成每日報告")
+    print("生成每日報告")邏輯
     return "報告已生成"
