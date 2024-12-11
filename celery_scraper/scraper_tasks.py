@@ -43,8 +43,10 @@ def scrape_all():
 
     finally:
         try:
-            # 清理所有懸掛的任務
+            # 安全機制: 確保程式能正確地關閉
+            # 清理所有懸掛的任務, all_tasks() 返回所有還在運行中的任務
             pending = asyncio.all_tasks(loop)
+            # gather 等待任務完成, return_exceptions=True 表示任務出錯也不會中斷其他任務
             loop.run_until_complete(asyncio.gather(
                 *pending, return_exceptions=True))
         finally:
@@ -54,5 +56,5 @@ def scrape_all():
 
 @app.task
 def daily_report():
-    print("生成每日報告")邏輯
+    print("生成每日報告")
     return "報告已生成"
