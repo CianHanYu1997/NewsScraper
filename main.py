@@ -1,18 +1,14 @@
-# import pandas as pd
-# import os
 import asyncio
-# from typing import List, Dict
 from managers.scraper_manager import ScraperManager
 from scrapers.first_layer.setn_crawler import SETNScraper
-# from scrapers.think_tank.brookings_scraper import BrookingsScraper
-# from scrapers.think_tank.aei_scraper import AEIScraper
-# from scrapers.think_tank.rand_scraper import RANDScraper
-# from scrapers.think_tank.americanprogress_scraper import AmericanProgressScraper  # noqa
-# from scrapers.think_tank.heritage_scraper import HeritageScraper
-# from models.article import NewsURLs
-# from .models.article_type import CFRThinkTankType  # type:ignore
+from scrapers.first_layer.cna_crawler import CNAScraper
+from scrapers.first_layer.mnews_crawler import MNEWSScraper
+from scrapers.first_layer.itn_crawler import ITNScraper
+from scrapers.first_layer.tvbs_crawler import TVBSScraper
+from scrapers.first_layer.ettoday_crawler import ETtodayScraper
 from utils.logging_config import setup_logging
 from utils.redis_client import RedisClient
+from celery_scraper.scraper_tasks import scrape_all
 import logging
 
 
@@ -28,10 +24,17 @@ async def main():
     manager = ScraperManager()
     # 註冊爬蟲
     manager.register_scraper(SETNScraper())
+    manager.register_scraper(CNAScraper())
+    manager.register_scraper(MNEWSScraper())
+    manager.register_scraper(ITNScraper())
+    manager.register_scraper(TVBSScraper())
+    manager.register_scraper(ETtodayScraper())
 
-    urls = await manager.scrape_selected(
-        names=["三立新聞"],
-    )
+    # urls = await manager.scrape_selected(
+    #     names=["TVBS"],
+    # )
+    urls = await manager.scrape_all()
+    print(urls)
     print(len(urls))
     # 獲取統計信息
     stats = await redis_client.add_urls(urls)
@@ -59,6 +62,6 @@ if __name__ == "__main__":
         file_level=logging.DEBUG      # 文件日誌等級
     )
 
-    # main()
-
     asyncio.run(main())
+    # result = scrape_all.delay()
+    # print(result.get())
