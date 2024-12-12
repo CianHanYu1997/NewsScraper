@@ -148,9 +148,11 @@ class ScrollPaginationLoadStrategy(PageLoadStrategy):
     def __init__(
             self,
             next_button_locator: tuple,
+            load_page: int = 100,
             max_result_locator: Optional[tuple] = None,
             max_result: int = 20):
         self.next_button_locator = next_button_locator
+        self.load_page = load_page
         self.max_result_locator = max_result_locator
         self.max_result = max_result
 
@@ -169,8 +171,10 @@ class ScrollPaginationLoadStrategy(PageLoadStrategy):
             wait: WebDriverWait,
             max_retries: int = 3) -> bool:
         try:
-            scroll_attempts = 0
-            while True:
+            scroll_attempts = 1
+            # 設置最大嘗試次數，防止異常情況
+            max_attempts = 100
+            while scroll_attempts < min(self.load_page, max_attempts):
                 # 1. 獲取當前頁面高度
                 last_height = await asyncio.to_thread(
                     lambda: driver.execute_script(
@@ -239,12 +243,12 @@ class ScrollPaginationLoadStrategy(PageLoadStrategy):
                         return False
 
                     scroll_attempts += 1
-                    logger.info(f"目前已進入第 {scroll_attempts+1} 頁")
+                    logger.info(f"目前已進入第 {scroll_attempts} 頁")
 
                 except TimeoutException:
                     logger.info("已達頁面底部: 等待按鈕超時")
                     return True
-
+            return False
         except Exception:
             logger.info("未找到Show More按鈕")
             return False
