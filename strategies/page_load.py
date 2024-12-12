@@ -2,6 +2,7 @@ import logging
 import random
 import asyncio
 from abc import ABC, abstractmethod
+from enum import Enum
 from typing import Optional
 from selenium import webdriver
 from selenium.webdriver.support.ui import WebDriverWait
@@ -29,13 +30,23 @@ class PageLoadStrategy(ABC):
         pass
 
 
+class ScrollType(Enum):
+    SMOOTH = "smooth"
+    DIRECT = "direct"
+    BOTH = "both"
+
+
 class ScrollLoadStrategy(PageLoadStrategy):
     """滾動加載策略"""
 
     def __init__(
             self,
+            scroll_type: ScrollType = ScrollType.DIRECT,
+            smooth_scroll_distance: int = 3000,
             scroll_pause_time: float = 2.0):
         # 設置每次滾動後等待的時間，讓新內容有時間加載
+        self.scroll_type = scroll_type
+        self.smooth_scroll_distance = smooth_scroll_distance
         self.scroll_pause_time = scroll_pause_time
 
     async def load_more_content(
@@ -52,36 +63,56 @@ class ScrollLoadStrategy(PageLoadStrategy):
         attempts = 1
 
         while attempts < max_attempts:
-            # 1. 滾動到頁面底部
-            await asyncio.to_thread(
-                lambda: driver.execute_script(
-                    "window.scrollTo(0, document.body.scrollHeight);"
-                )
-            )
+            # 根據滾動類型執行相應的滾動操作
+            if self.scroll_type == ScrollType.SMOOTH:
+                await self._smooth_scroll(driver, self.smooth_scroll_distance)
+            elif self.scroll_type == ScrollType.DIRECT:
+                await self._scroll_to_bottom(driver)
+            else:  # ScrollType.BOTH
+                await self._smooth_scroll(driver, self.smooth_scroll_distance)
+                await asyncio.sleep(0.5)  # 短暫停頓
+                await self._scroll_to_bottom(driver)
 
-            # 2. 等待新內容加載
+            # 等待新內容加載
             await asyncio.sleep(self.scroll_pause_time)
 
-            # 3. 計算新的頁面高度
+            # 計算新的頁面高度
             new_height = await asyncio.to_thread(
                 lambda: driver.execute_script(
                     "return document.body.scrollHeight")
             )
 
-            # 4. 如果高度沒變，表示沒有新內容了
+            # 檢查是否到達底部
             if new_height == last_height:
                 same_high_count += 1
-                # 如果連續三次高度沒有變化，認為已到達底部
                 if same_high_count >= 1:
                     return False
             else:
                 same_high_count = 0
 
-            # 5. 更新高度並繼續下一次滾動
             last_height = new_height
             attempts += 1
 
         return True
+
+    async def _smooth_scroll(self, driver: webdriver.Chrome, distance: int):
+        """平滑滾動指定距離"""
+        await asyncio.to_thread(
+            lambda: driver.execute_script("""
+                window.scrollBy({
+                    top: arguments[0],
+                    behavior: 'smooth'
+                });
+            """, distance)
+        )
+
+    async def _scroll_to_bottom(self, driver: webdriver.Chrome):
+        """直接滾動到底部"""
+        await asyncio.to_thread(
+            lambda: driver.execute_script(
+                "window.scrollTo(0, document.body.scrollHeight);"
+            )
+        )
 
 
 class PaginationLoadStrategy(PageLoadStrategy):
