@@ -114,6 +114,7 @@ class NewsScraper(ABC):
         max_loads = load_count if load_count is not None else default_count
         all_urls: List[str] = []
         current_load = 0  # 當前加載次數計數器
+        should_continue = True
 
         try:
             # 啟動 driver 時使用鎖保護，避免self.driver使用時被其他線程修改
@@ -169,6 +170,10 @@ class NewsScraper(ABC):
                     logger.info("沒有找到新報導, 停止爬取該網頁...")
                     break
 
+                if not should_continue:
+                    logger.info("已經到達內容底部，不再加載更多...")
+                    break
+
                 # 判斷頁面加載策略類型
                 if self.page_load_strategy:
                     # 滾動頁面
@@ -177,6 +182,7 @@ class NewsScraper(ABC):
                         if not await self.page_load_strategy.load_more_content(  # noqa
                                 self.driver, self.wait):
                             logger.info("滾動到底部，沒有更多內容可加載...")
+                            should_continue = False
 
                     # 分頁頁面
                     elif isinstance(self.page_load_strategy, PaginationLoadStrategy):  # noqa:E501
@@ -192,6 +198,7 @@ class NewsScraper(ABC):
                         if not await self.page_load_strategy.load_more_content(
                                 self.driver, self.wait):
                             logger.info("滾動到底部，沒有更多內容可加載...")
+                            should_continue = False
 
                     else:
                         logger.warning("未知的頁面加載策略類型")
