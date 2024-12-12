@@ -3,6 +3,10 @@ from utils.redis_client import RedisClient
 from managers.scraper_manager import ScraperManager
 from scrapers.first_layer.setn_crawler import SETNScraper
 from scrapers.first_layer.cna_crawler import CNAScraper
+from scrapers.first_layer.mnews_crawler import MNEWSScraper
+from scrapers.first_layer.itn_crawler import ITNScraper
+from scrapers.first_layer.tvbs_crawler import TVBSScraper
+from scrapers.first_layer.ettoday_crawler import ETtodayScraper
 import asyncio
 
 
@@ -19,8 +23,13 @@ def scrape_all():
         try:
             # 初始化管理器
             manager = ScraperManager()
+            # 註冊爬蟲
             manager.register_scraper(SETNScraper())
             manager.register_scraper(CNAScraper())
+            manager.register_scraper(MNEWSScraper())
+            manager.register_scraper(ITNScraper())
+            manager.register_scraper(TVBSScraper())
+            manager.register_scraper(ETtodayScraper())
 
             # 執行爬蟲: 運行直到一個 Future 實例完成
             urls = await manager.scrape_all()
