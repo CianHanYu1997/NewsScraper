@@ -16,6 +16,7 @@ class MNEWSScraper(NewsScraper):
             next_button_locator=(
                 By.CSS_SELECTOR,
                 ".load-more.g-button-load-more.button-load-more"),
+            load_page=15
         )
 
         # 2. 初始化父類
