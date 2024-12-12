@@ -106,3 +106,8 @@ venv.bak/
 # add
 .idea/
 config/redis/data
+
+# celery beat schedule文件
+*.bak
+*.dat
+*.dir
