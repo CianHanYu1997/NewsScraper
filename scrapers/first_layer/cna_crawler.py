@@ -2,14 +2,14 @@ import logging
 from typing import Optional
 from selenium.webdriver.common.by import By
 
-from scrapers.base import NewsScraper
+from scrapers.base import NewsSeleniumFetcher
 from strategies.page_load import ScrollPaginationLoadStrategy
 
 
 logger = logging.getLogger(__name__)
 
 
-class CNAScraper(NewsScraper):
+class CNAScraper(NewsSeleniumFetcher):
     def __init__(self):
         # 1. 使用翻頁策略，定位下一頁按鈕
         page_load_strategy = ScrollPaginationLoadStrategy(

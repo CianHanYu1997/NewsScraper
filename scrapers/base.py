@@ -17,8 +17,8 @@ from url_buliders.base import BaseURLBuilder
 logger = logging.getLogger(__name__)
 
 
-class NewsScraper(ABC):
-    """新聞網站爬蟲基類"""
+class NewsSeleniumFetcher(ABC):
+    """新聞網站爬蟲(selenium)基類"""
 
     def __init__(
         self,
