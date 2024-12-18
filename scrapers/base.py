@@ -233,7 +233,7 @@ class NewsHTTPFetcher(ABC):
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self.client.close()
+        await self.close()
 
     async def _init_client(self):
         """初始化 HTTP 客戶端"""
@@ -326,4 +326,4 @@ class NewsHTTPFetcher(ABC):
         """清理資源"""
         if self.client:
             await self.client.aclose()
-        await self.proxy_operations.close()
+        await self.proxy_ops.close()
