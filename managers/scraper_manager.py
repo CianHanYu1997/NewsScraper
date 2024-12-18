@@ -1,5 +1,5 @@
 from typing import List, Optional, Dict
-from scrapers.base import NewsScraper
+from scrapers.base import NewsSeleniumFetcher
 import logging
 import asyncio
 
@@ -10,9 +10,9 @@ class ScraperManager:
     def __init__(
         self,
     ):
-        self.scrapers: Dict[str, NewsScraper] = {}
+        self.scrapers: Dict[str, NewsSeleniumFetcher] = {}
 
-    def register_scraper(self, scraper: NewsScraper):
+    def register_scraper(self, scraper: NewsSeleniumFetcher):
         """註冊爬蟲"""
         self.scrapers[scraper.get_name()] = scraper
 
