@@ -8,7 +8,7 @@ class ProxyOperations:
         self.ua = UserAgent()
         self.client = httpx.AsyncClient()
 
-    async def get_proxy(self, https: bool) -> Dict:
+    async def get_proxy(self, https: bool = False) -> Dict:
         """
         隨機獲取一個代理資訊
 
@@ -31,7 +31,7 @@ class ProxyOperations:
             f"http://127.0.0.1:5010/get/{'?type=https' if https else ''}")
         return response.json()
 
-    async def get_all_proxy(self, https: bool) -> List[Dict]:
+    async def get_all_proxy(self, https: bool = False) -> List[Dict]:
         """
         獲取所有代理服務的資訊
 
@@ -61,7 +61,7 @@ class ProxyOperations:
         response = await self.client.get("http://127.0.0.1:5010/count/")
         return response.json()
 
-    async def pop_proxy(self, https: bool) -> Dict:
+    async def pop_proxy(self, https: bool = False) -> Dict:
         """
         隨機獲取並刪除一個代理資訊
 
