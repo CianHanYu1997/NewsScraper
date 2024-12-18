@@ -1,7 +1,10 @@
 from abc import ABC, abstractmethod
-from typing import Optional, List
+from typing import Optional, List, Dict
 import logging
 import asyncio
+import httpx
+import random
+from bs4 import BeautifulSoup
 
 from selenium import webdriver
 from selenium.webdriver.support import expected_conditions as EC
@@ -14,6 +17,9 @@ from strategies.page_load import (
     ScrollPaginationLoadStrategy)
 from url_buliders.base import BaseURLBuilder
 
+from models.article import News
+from utils.proxy_operations import ProxyOperations
+from config.crawler.config import HttpxFetcherConfig
 logger = logging.getLogger(__name__)
 
 
@@ -213,3 +219,111 @@ class NewsSeleniumFetcher(ABC):
         finally:
             await self.close_driver()
         return all_urls
+
+
+class NewsHTTPFetcher(ABC):
+    """新聞網站爬蟲(httpx)基類"""
+
+    def __init__(self):
+        self.client = None
+        self.proxy_ops = ProxyOperations()
+        self.config = HttpxFetcherConfig()
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.client.close()
+
+    async def _init_client(self):
+        """初始化 HTTP 客戶端"""
+        if self.client is None:
+            self.client = httpx.AsyncClient(
+                timeout=self.config.timeout,
+                headers=self.get_random_headers(),
+                follow_redirects=True
+            )
+
+    def get_random_headers(self) -> Dict[str, str]:
+        """獲取隨機請求頭"""
+        return {
+            'User-Agent': self.proxy_ops.ua.random,
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',  # noqa
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+        }
+
+    async def random_delay(self):
+        """隨機延遲"""
+        delay = random.uniform(*self.config.random_delay_range)
+        await asyncio.sleep(delay)
+
+    @abstractmethod
+    async def parse_content(self, soup: BeautifulSoup) -> str:
+        """解析新聞內容"""
+        pass
+
+    @abstractmethod
+    async def parse_json_ld(self, soup: BeautifulSoup) -> dict:
+        """解析 JSON-LD 數據"""
+        pass
+
+    @abstractmethod
+    async def transform_to_news(
+            self, json_ld: dict, content: str, url: str) -> News:
+        """將解析的數據轉換為 News 物件"""
+        pass
+
+    async def fetch_with_retry(self, url: str) -> httpx.Response:
+        """帶重試機制的請求"""
+        await self._init_client()
+
+        for attempt in range(self.config.retry_times):
+            try:
+                # 使用代理池獲取代理
+                if self.config.use_proxy:
+                    proxy_info = await self.proxy_ops.get_proxy()
+                    if proxy_info.get('proxy'):
+                        self.client.proxies = {
+                            'http://': f'http://{proxy_info["proxy"]}',
+                        }
+
+                # 更新請求頭
+                self.client.headers = self.get_random_headers()
+
+                # 執行請求
+                response = await self.client.get(url)
+                response.raise_for_status()
+                return response
+
+            except Exception as e:
+                if self.config.use_proxy and proxy_info.get('proxy'):
+                    await self.proxy_ops.delete_proxy(proxy_info['proxy'])
+
+                if attempt == self.config.retry_times - 1:
+                    raise e
+
+                await asyncio.sleep(self.config.retry_delay)
+                continue
+
+        # 如果所有重試都失敗了，拋出異常
+        raise Exception(
+            f"All {self.config.retry_times} retry attempts failed for URL: {url}")  # noqa
+
+    async def fetch(self, url: str) -> News:
+        """獲取並解析新聞"""
+        await self.random_delay()
+        response = await self.fetch_with_retry(url)
+        soup = BeautifulSoup(response.text, 'html.parser')
+
+        json_ld = await self.parse_json_ld(soup)
+        content = await self.parse_content(soup)
+
+        return await self.transform_to_news(json_ld, content, url)
+
+    async def close(self):
+        """清理資源"""
+        if self.client:
+            await self.client.aclose()
+        await self.proxy_operations.close()
