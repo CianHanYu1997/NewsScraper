@@ -318,9 +318,24 @@ class NewsHTTPFetcher(ABC):
         soup = BeautifulSoup(response.text, 'html.parser')
 
         json_ld = await self.parse_json_ld(soup)
-        content = await self.parse_content(soup)
+        metadata = await self.parse_metadata(soup)
+        html_data = await self.parse_html(soup)
 
-        return await self.transform_to_news(json_ld, content, url)
+        return await self.transform_to_news(json_ld, metadata, html_data, url)
+
+    def _get_tw_coverage(self, description: str) -> str:
+        """從描述中提取台灣地區"""
+        for region in self.TW_REGIONS:
+            if region in description:
+                return self.TW_REGIONS[region]
+        return '台灣'  # 如果找不到特定地區，返回預設值
+
+    def _get_intl_coverage(self, description: str) -> str:
+        """從描述中提取國際新聞地區"""
+        for region in self.INTERNATIONAL_REGIONS:
+            if region in description:
+                return self.INTERNATIONAL_REGIONS[region]
+        return '國際'
 
     async def close(self):
         """清理資源"""
