@@ -20,6 +20,8 @@ from url_buliders.base import BaseURLBuilder
 from models.article import News
 from utils.proxy_operations import ProxyOperations
 from config.crawler.config import HttpxFetcherConfig
+from config.region_config import (
+    TAIWAN_REGION_MAPPING, INTERNATIONAL_REGIONS_MAPPING)
 logger = logging.getLogger(__name__)
 
 
@@ -228,6 +230,8 @@ class NewsHTTPFetcher(ABC):
         self.client = None
         self.proxy_ops = ProxyOperations()
         self.config = HttpxFetcherConfig()
+        self.TW_REGIONS = TAIWAN_REGION_MAPPING
+        self.INTERNATIONAL_REGIONS = INTERNATIONAL_REGIONS_MAPPING
 
     async def __aenter__(self):
         return self
@@ -260,8 +264,13 @@ class NewsHTTPFetcher(ABC):
         await asyncio.sleep(delay)
 
     @abstractmethod
-    async def parse_content(self, soup: BeautifulSoup) -> str:
-        """解析新聞內容"""
+    async def parse_html(self, soup: BeautifulSoup) -> dict:
+        """解析網頁內容"""
+        pass
+
+    @abstractmethod
+    async def parse_metadata(self, soup: BeautifulSoup) -> dict:
+        """解析網頁中的元數據，包含 meta 標籤和其他結構化數據"""
         pass
 
     @abstractmethod
@@ -271,7 +280,7 @@ class NewsHTTPFetcher(ABC):
 
     @abstractmethod
     async def transform_to_news(
-            self, json_ld: dict, content: str, url: str) -> News:
+            self, json_ld: dict, metadata: dict, html_data: dict, url: str) -> News:  # noqa
         """將解析的數據轉換為 News 物件"""
         pass
 
