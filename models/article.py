@@ -6,11 +6,11 @@ from datetime import datetime
 class News(BaseModel):
     """通用新聞數據結構"""
     media_name: str
-    journal_name: str
+    title: str
+    author: str
     coverage: str
     publish_date: datetime
     category: str
-    title: str
     description: str
     keywords: List[str]
     url: str
