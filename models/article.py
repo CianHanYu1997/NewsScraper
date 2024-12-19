@@ -12,7 +12,6 @@ class News(BaseModel):
     category: str
     title: str
     description: str
-    content: str
     keywords: List[str]
     url: str
 
