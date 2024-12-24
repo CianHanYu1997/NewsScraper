@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 class SetnHTTPFetcher(NewsHTTPFetcher):
     """三立新聞網 HTTP 爬蟲實作"""
 
-    async def parse_metadata(self, soup: BeautifulSoup) -> Dict:
+    def parse_metadata(self, soup: BeautifulSoup) -> Dict:
         """解析所有需要的 meta 資料"""
         metadata: Dict[str, str] = {}
 
@@ -34,7 +34,7 @@ class SetnHTTPFetcher(NewsHTTPFetcher):
 
         return metadata
 
-    async def parse_json_ld(self, soup: BeautifulSoup) -> Dict:
+    def parse_json_ld(self, soup: BeautifulSoup) -> Dict:
         """解析 JSON-LD 數據"""
         json_ld = {}
 
@@ -55,7 +55,7 @@ class SetnHTTPFetcher(NewsHTTPFetcher):
 
         return json_ld
 
-    async def parse_html(self, soup: BeautifulSoup) -> dict:
+    def parse_html(self, soup: BeautifulSoup) -> dict:
         """從 HTML 結構中解析新聞資訊"""
         html_data = {}
 
@@ -98,7 +98,7 @@ class SetnHTTPFetcher(NewsHTTPFetcher):
 
         return html_data
 
-    async def transform_to_news(self, json_ld: dict, metadata: dict, html_data: dict, url: str) -> News:  # noqa
+    def transform_to_news(self, json_ld: dict, metadata: dict, html_data: dict, url: str) -> News:  # noqa
         """將解析的數據轉換為 News 物件"""
         # 提取資料
         title = (json_ld.get('headline') or

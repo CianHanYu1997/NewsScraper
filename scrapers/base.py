@@ -264,22 +264,22 @@ class NewsHTTPFetcher(ABC):
         await asyncio.sleep(delay)
 
     @abstractmethod
-    async def parse_html(self, soup: BeautifulSoup) -> dict:
+    def parse_html(self, soup: BeautifulSoup) -> dict:
         """解析網頁內容"""
         pass
 
     @abstractmethod
-    async def parse_metadata(self, soup: BeautifulSoup) -> dict:
+    def parse_metadata(self, soup: BeautifulSoup) -> dict:
         """解析網頁中的元數據，包含 meta 標籤和其他結構化數據"""
         pass
 
     @abstractmethod
-    async def parse_json_ld(self, soup: BeautifulSoup) -> dict:
+    def parse_json_ld(self, soup: BeautifulSoup) -> dict:
         """解析 JSON-LD 數據"""
         pass
 
     @abstractmethod
-    async def transform_to_news(
+    def transform_to_news(
             self, json_ld: dict, metadata: dict, html_data: dict, url: str) -> News:  # noqa
         """將解析的數據轉換為 News 物件"""
         pass
@@ -326,11 +326,11 @@ class NewsHTTPFetcher(ABC):
         response = await self.fetch_with_retry(url)
         soup = BeautifulSoup(response.text, 'html.parser')
 
-        json_ld = await self.parse_json_ld(soup)
-        metadata = await self.parse_metadata(soup)
-        html_data = await self.parse_html(soup)
+        json_ld = self.parse_json_ld(soup)
+        metadata = self.parse_metadata(soup)
+        html_data = self.parse_html(soup)
 
-        return await self.transform_to_news(json_ld, metadata, html_data, url)
+        return self.transform_to_news(json_ld, metadata, html_data, url)
 
     def _get_tw_coverage(self, description: str) -> str:
         """從描述中提取台灣地區"""
