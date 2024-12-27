@@ -161,7 +161,7 @@ class SetnHTTPFetcher(NewsHTTPFetcher):
 
             # 處理包含 '/' 的格式 (2024/12/18 19:22)
             elif '/' in date_str:
-                return datetime.strptime(date_str, '%Y/%m/%d %H:%M')
+                return datetime.strptime(date_str, '%Y-%m-%d %H:%M')
 
             # 處理包含 '-' 的格式 (2024-12-19 21:38)
             elif '-' in date_str:
